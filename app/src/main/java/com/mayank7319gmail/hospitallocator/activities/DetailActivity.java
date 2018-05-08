@@ -1,8 +1,10 @@
 package com.mayank7319gmail.hospitallocator.activities;
 
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -18,6 +20,8 @@ import com.mayank7319gmail.hospitallocator.models.DetailResult;
 import com.mayank7319gmail.hospitallocator.models.DetailSinglePlace;
 import com.mayank7319gmail.hospitallocator.rest_api.GooglePlacesApi;
 import com.mayank7319gmail.hospitallocator.rest_api.HospitalListClient;
+import com.mayank7319gmail.hospitallocator.viewmodels.DetailViewModel;
+import com.mayank7319gmail.hospitallocator.viewmodels.MapViewModel;
 import com.squareup.picasso.Picasso;
 import com.wang.avi.AVLoadingIndicatorView;
 
@@ -28,9 +32,6 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class DetailActivity extends AppCompatActivity {
-
-    GooglePlacesApi googlePlacesApi;
-    HospitalListClient hospitalListClient;
 
     Context ctx;
     DetailSinglePlace place;
@@ -45,6 +46,8 @@ public class DetailActivity extends AppCompatActivity {
 
     String placeId;
     double lat, lng;
+
+    DetailViewModel mViewModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,10 +74,19 @@ public class DetailActivity extends AppCompatActivity {
         setLoadingAnimation();
 
         ctx = this;
-        googlePlacesApi = new GooglePlacesApi(ctx);
-        hospitalListClient = googlePlacesApi.getHospitalListClient();
 
-        getDetails(placeId);
+        mViewModel = ViewModelProviders.of(this).get(DetailViewModel.class);
+        android.arch.lifecycle.Observer<DetailResult> detailResultObserver = new android.arch.lifecycle.Observer<DetailResult>() {
+            @Override
+            public void onChanged(@Nullable DetailResult detailResultChange) {
+                place = detailResultChange.getResult();
+                processDetailResult();
+            }
+        };
+
+        mViewModel.getObservableList().observe(this, detailResultObserver);
+
+        mViewModel.getDetails(placeId);
     }
 
     void setDetails(){
@@ -106,7 +118,7 @@ public class DetailActivity extends AppCompatActivity {
         checkAndSet(tvRating,String.valueOf(place.getRating()));
 
         if(place.getWebsite() != null){
-            tvWebsite.setTextColor(R.color.color_url);
+            tvWebsite.setTextColor(getResources().getColor(R.color.color_url));
             tvWebsite.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -136,7 +148,7 @@ public class DetailActivity extends AppCompatActivity {
         else tv.setText(value);
     }
 
-    void getDetails(String placeId){
+    /*void getDetails(String placeId){
         HashMap<String,String> params = new HashMap<>();
         params.put("key", GooglePlacesApi.WEB_KEY);
         params.put("placeid",placeId);
@@ -162,6 +174,17 @@ public class DetailActivity extends AppCompatActivity {
                 Toast.makeText(ctx,"Unable to fetch details.",Toast.LENGTH_SHORT).show();
             }
         });
+    }*/
+
+    void processDetailResult(){
+        if(place == null)
+            Toast.makeText(ctx,"Unable to find hospital.",Toast.LENGTH_SHORT).show();
+        else {
+            if(place.getPhotos() != null)
+                setPhoto(place.getPhotos().get(0).getPhotoReference());
+
+            setDetails();
+        }
     }
 
     void setLoadingAnimation(){

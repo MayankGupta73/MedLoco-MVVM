@@ -1,6 +1,7 @@
 package com.mayank7319gmail.hospitallocator.activities;
 
 import android.app.SearchManager;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -50,12 +51,14 @@ import com.mayank7319gmail.hospitallocator.models.SinglePlace;
 import com.mayank7319gmail.hospitallocator.rest_api.GooglePlacesApi;
 import com.mayank7319gmail.hospitallocator.rest_api.HospitalListClient;
 import com.mayank7319gmail.hospitallocator.utils.AdUtil;
+import com.mayank7319gmail.hospitallocator.viewmodels.MapViewModel;
 import com.wang.avi.AVLoadingIndicatorView;
 
 import org.parceler.Parcels;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Observer;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -70,8 +73,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     static LatLng defLocation = new LatLng(28.5, 77); //Delhi
     static LatLng curLocation = defLocation;
 
-    int locationType = GooglePlacesApi.TYPE_HOSPITAL;
-    int locationRankby = GooglePlacesApi.RANKBY_PROMINENCE;
+    public int locationType = GooglePlacesApi.TYPE_HOSPITAL;
+    public int locationRankby = GooglePlacesApi.RANKBY_PROMINENCE;
 
     LocationManager locMan;
     LocationListener locLis;
@@ -94,6 +97,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     AdView mAdView;
 
     Spinner spinnerType, spinnerRank;
+
+    MapViewModel mViewModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -127,6 +132,27 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
             googlePlacesApi = new GooglePlacesApi(ctx);
             hospitalListClient = googlePlacesApi.getHospitalListClient();
+
+        mViewModel = ViewModelProviders.of(this).get(MapViewModel.class);
+        android.arch.lifecycle.Observer<PlaceList> placeListObserver = new android.arch.lifecycle.Observer<PlaceList>() {
+            @Override
+            public void onChanged(@Nullable PlaceList placeListChange) {
+                placeList = placeListChange;
+                processMapInput();
+            }
+        };
+
+        mViewModel.getObservableList().observe(this, placeListObserver);
+
+        android.arch.lifecycle.Observer<DistanceResult> distanceObserver = new android.arch.lifecycle.Observer<DistanceResult>() {
+            @Override
+            public void onChanged(@Nullable DistanceResult distanceChange) {
+                distanceResult = distanceChange;
+                processDistanceResult();
+            }
+        };
+
+        mViewModel.getObservableDistanceResult().observe(this, distanceObserver);
 
         btnDetails.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -275,7 +301,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 return;
             }
             locMan.removeUpdates(locLis);
-            getHospitalLocation(curLocation);
+            //getHospitalLocation(curLocation);
+
+            mViewModel.getHospitalLocation(loc, locationType, locationRankby);
+
 //            Log.d(TAG, "initMapPointer: Map location is correct");
         }
     }
@@ -312,21 +341,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 //                Log.d(TAG, "onResponse: Response recieved");
                 placeList = response.body();
 
-                if(placeList != null){
-                    for(int i = 0; i<10; i++){ //Limiting to 10 right now
-                        SinglePlace place = placeList.places.get(i);
-                        addMapMarker(place.getLoc(),place.getName(),place.getVicinity());
-                    }
-
-                    getDistance();
-                }
-                //addMapMarker(new LatLng(28.6566,77.18432),"Test loc","testing");
-                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(curLocation,14));
-
-                mapReady = true;
-                curmarker.showInfoWindow();
-                stopLoadingAnimation();
-//                Log.d(TAG, "onResponse: Fininshed adding location pointers");
+                processMapInput();
             }
 
             @Override
@@ -335,6 +350,25 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 Toast.makeText(ctx,"Unable to access server. Please try again later",Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    void processMapInput(){
+        if(placeList != null){
+            for(int i = 0; i<10; i++){ //Limiting to 10 right now
+                SinglePlace place = placeList.places.get(i);
+                addMapMarker(place.getLoc(),place.getName(),place.getVicinity());
+            }
+
+            //getDistance();
+            mViewModel.getDistance(curLocation);
+        }
+        //addMapMarker(new LatLng(28.6566,77.18432),"Test loc","testing");
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(curLocation,14));
+
+        mapReady = true;
+        curmarker.showInfoWindow();
+        stopLoadingAnimation();
+//                Log.d(TAG, "onResponse: Fininshed adding location pointers");
     }
 
     void showDetailList(){
@@ -364,7 +398,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             public void onResponse(Call<DistanceResult> call, Response<DistanceResult> response) {
                 distanceResult = response.body();
 
-                if(distanceResult != null){
+               /* if(distanceResult != null){
                     ArrayList<DistanceDuration> distanceDurations = distanceResult.getRows().get(0).getElements();
                     for(int i=0; i<distanceDurations.size(); i++){
                         DistanceDuration d = distanceDurations.get(i);
@@ -377,7 +411,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                         placeList.places.get(i).setTimeMinutes(d.getDuration().getValue());
                         placeList.places.get(i).setTimeString(d.getDuration().getText());
                     }
-                }
+                }*/
+               processDistanceResult();
             }
 
             @Override
@@ -386,6 +421,23 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 //                Log.d(TAG, "onFailure: cannot fetch distances");
             }
         });
+    }
+
+    void processDistanceResult(){
+        if(distanceResult != null){
+            ArrayList<DistanceDuration> distanceDurations = distanceResult.getRows().get(0).getElements();
+            for(int i=0; i<distanceDurations.size(); i++){
+                DistanceDuration d = distanceDurations.get(i);
+
+//                        Log.d(TAG, "onResponse: distance"+d.getDistance().getText());
+//                        Log.d(TAG, "onResponse: duration"+d.getDuration().getText());
+
+                placeList.places.get(i).setDistance(d.getDistance().getValue());
+                placeList.places.get(i).setDistanceString(d.getDistance().getText());
+                placeList.places.get(i).setTimeMinutes(d.getDuration().getValue());
+                placeList.places.get(i).setTimeString(d.getDuration().getText());
+            }
+        }
     }
 
     void showOptionDialog(){
@@ -431,8 +483,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                     mapReady = false;
                     setLoadingAnimation();
                     initCurrentPointer(curLocation);
-                    getHospitalLocation(curLocation);
-                }
+//                    getHospitalLocation(curLocation);
+                    mViewModel.getHospitalLocation(curLocation, locationType, locationRankby);                }
             }
         });
 

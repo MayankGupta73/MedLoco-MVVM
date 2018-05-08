@@ -1,8 +1,10 @@
 package com.mayank7319gmail.hospitallocator.activities;
 
 import android.app.SearchManager;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -22,6 +24,7 @@ import com.mayank7319gmail.hospitallocator.recycler.HospitalListRecycler;
 import com.mayank7319gmail.hospitallocator.rest_api.GooglePlacesApi;
 import com.mayank7319gmail.hospitallocator.rest_api.HospitalListClient;
 import com.mayank7319gmail.hospitallocator.utils.AdUtil;
+import com.mayank7319gmail.hospitallocator.viewmodels.ListViewModel;
 import com.wang.avi.AVLoadingIndicatorView;
 
 import org.parceler.Parcels;
@@ -46,6 +49,10 @@ public class ListActivity extends AppCompatActivity {
 
     GooglePlacesApi googlePlacesApi;
     HospitalListClient hospitalListClient;
+
+    PlaceList placeList;
+    ListViewModel mViewModel;
+
 
     public static final String TAG = "list";
 
@@ -90,7 +97,20 @@ public class ListActivity extends AppCompatActivity {
             googlePlacesApi = new GooglePlacesApi(getApplicationContext());
             hospitalListClient = googlePlacesApi.getHospitalListClient();
 
-            HashMap<String, String > params = googlePlacesApi.getQueryParams(MainActivity.curLocation, GooglePlacesApi.TYPE_HOSPITAL, GooglePlacesApi.RANKBY_PROMINENCE);
+            mViewModel = ViewModelProviders.of(this).get(ListViewModel.class);
+            android.arch.lifecycle.Observer<PlaceList> searchResultObserver = new android.arch.lifecycle.Observer<PlaceList>() {
+                @Override
+                public void onChanged(@Nullable PlaceList searchResultChange) {
+                    placeList = searchResultChange;
+                    processSearchResults();
+                }
+            };
+
+            mViewModel.getObservableList().observe(this, searchResultObserver);
+
+            mViewModel.getSearchResults(query, MainActivity.curLocation);
+
+            /*HashMap<String, String > params = googlePlacesApi.getQueryParams(MainActivity.curLocation, GooglePlacesApi.TYPE_HOSPITAL, GooglePlacesApi.RANKBY_PROMINENCE);
             params.put("radius","50000");
             params.put("name", query);
 
@@ -98,13 +118,13 @@ public class ListActivity extends AppCompatActivity {
                 @Override
                 public void onResponse(Call<PlaceList> call, Response<PlaceList> response) {
 //                    Log.d(TAG, "onResponse: resp received");
-                    PlaceList placeList = response.body();
+                    placeList = response.body();
 
                     if(placeList != null){
                         stopLoadingAnimation();
                         itemList = placeList.places;
                         if(itemList.size() == 0)
-                            tvDisplayResult.setVisibility(View.VISIBLE);
+                            displayFailureMessage();
                         else
                             bindRecyclerView();
 
@@ -116,15 +136,33 @@ public class ListActivity extends AppCompatActivity {
                 public void onFailure(Call<PlaceList> call, Throwable t) {
 //                    Log.d(TAG, "onFailure: cannot access places api");
                     Toast.makeText(getApplicationContext(),"Unable to access server. Please try again later",Toast.LENGTH_SHORT).show();
-                    tvDisplayResult.setVisibility(View.VISIBLE);
+                    displayFailureMessage();
                 }
-            });
+            });*/
         }
         else {
             itemList = Parcels.unwrap(intent.getParcelableExtra("itemList"));
             bindRecyclerView();
         }
 
+    }
+
+    void processSearchResults(){
+        if(placeList != null){
+            stopLoadingAnimation();
+            itemList = placeList.places;
+            if(itemList.size() == 0)
+                tvDisplayResult.setVisibility(View.VISIBLE);
+            else
+                bindRecyclerView();
+
+        }
+        else displayFailureMessage();
+
+    }
+
+    void displayFailureMessage(){
+        tvDisplayResult.setVisibility(View.VISIBLE);
     }
 
     @Override
